@@ -2,121 +2,365 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Jigsaw Puzzle Sederhana</title>
+  <title>Jigsaw Puzzle 5x8 Canvas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Font Awesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   <style>
-    body { font-family: Arial,sans-serif; background:#f3f5fa; text-align:center; }
-    h1 { color: #4267b2; }
-    #game-ui { margin: 15px 0 18px 0; }
-    #puzzle-board { display: grid; grid-template-columns: repeat(3,70px); gap: 6px; margin:0 auto; width: 222px;}
-    .piece { background: #fff; border:2px solid #bbb; width:70px; height:70px; font-size:2em; display:flex; align-items:center; justify-content:center; cursor:grab; }
-    .piece.placed { background: #b2ffb2; cursor:default; }
-    #message { margin-top:20px; color:#2aaf2a; }
-    button { margin:3px; padding:7px 10px; border-radius:6px; border:none; background:#4267b2; color:#fff; font-size:1em; cursor:pointer;}
-    button:hover { background:#294179; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    #container { display: flex; flex-direction: row; gap: 24px; padding: 24px; }
+    #left-panel { flex: 1; }
+    #canvas-container { position: relative; }
+    #puzzle-canvas { background: #fff; border: 2px solid #555; display: block; }
+    #puzzle-guide { position: absolute; left: 0; top: 0; pointer-events: none; opacity: 0.3;}
+    #controls { margin: 16px 0 8px 0; display: flex; gap: 8px; align-items: center;}
+    #pieces-panel { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 90px;}
+    .piece-thumb { border: 1px solid #aaa; margin: 2px; cursor: grab; }
+    .piece-thumb.dragging { opacity: 0.5; }
+    #right-panel { width: 190px; }
+    #preview-container { position: relative; width: 170px; }
+    #preview-img { width: 170px; border: 2px solid #888; cursor: pointer; }
+    #preview-overlay { display: none; position: fixed; top: 0; left: 0; right:0; bottom:0; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;}
+    #preview-overlay img { max-width: 90vw; max-height: 90vh; border: 6px solid #fff;}
+    #hint-btn { background: #FFD600; border: none; border-radius: 6px; cursor: pointer; padding: 8px 14px; font-size: 18px;}
+    #hint-btn:active { background: #FFF176; }
+    #url-input { width: 120px; }
   </style>
 </head>
 <body>
-  <h1>🧩 Jigsaw Puzzle Sederhana</h1>
-  <div id="game-ui">
-    Waktu: <span id="timer">0</span> detik |
-    Energi: <span id="energy">5</span> ⚡
-    <br>
-    <button onclick="startGame()">Main Lagi</button>
+  <div id="container">
+    <div id="left-panel">
+      <div id="controls">
+        <input type="file" id="img-file" accept="image/*">
+        <input type="text" id="url-input" placeholder="URL gambar">
+        <button id="load-url-btn">Unggah URL</button>
+        <button id="hint-btn" title="Hint"><i class="fa-solid fa-lightbulb"></i></button>
+      </div>
+      <div id="canvas-container">
+        <canvas id="puzzle-canvas" width="800" height="500"></canvas>
+        <canvas id="puzzle-guide" width="800" height="500"></canvas>
+      </div>
+      <div id="pieces-panel"></div>
+    </div>
+    <div id="right-panel">
+      <div id="preview-container">
+        <img id="preview-img" src="" alt="Preview">
+      </div>
+    </div>
   </div>
-  <div id="puzzle-board"></div>
-  <div id="message"></div>
+  <div id="preview-overlay">
+    <img src="" alt="Preview Besar">
+  </div>
   <script>
-    // --- Inisialisasi
-    const SIZE = 3; // 3x3
-    let puzzle = [], shuffled = [], timer = 0, interval, energy = 5, playing = false;
-
-    function createPuzzleArray() {
-      puzzle = [];
-      for (let i = 1; i <= SIZE*SIZE; i++) puzzle.push(i);
+    // Konfigurasi Puzzle
+    const ROWS = 5, COLS = 8;
+    const PIECE_W = 100, PIECE_H = 100;
+    const CANVAS_W = COLS * PIECE_W, CANVAS_H = ROWS * PIECE_H;
+    const PIECE_MARGIN = 2;
+    const SNAP_DIST = 28;
+    const PIECES_PANEL_H = 110;
+    let puzzleImg = new Image();
+    let imgUrl = '';
+    let pieces = [];
+    let placed = [];
+    let draggingPiece = null, offsetX = 0, offsetY = 0;
+    let puzzleSolved = false;
+    let thumbImgs = [];
+    let piecesPanelDiv = document.getElementById('pieces-panel');
+    let hintBtn = document.getElementById('hint-btn');
+    let previewImg = document.getElementById('preview-img');
+    let previewOverlay = document.getElementById('preview-overlay');
+    let canvas = document.getElementById('puzzle-canvas');
+    let guideCanvas = document.getElementById('puzzle-guide');
+    let ctx = canvas.getContext('2d');
+    let gtx = guideCanvas.getContext('2d');
+    let boardRect = { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H };
+    function resetPuzzle() {
+      pieces = [];
+      placed = Array(ROWS * COLS).fill(null);
+      thumbImgs = [];
+      draggingPiece = null;
+      offsetX = offsetY = 0;
+      puzzleSolved = false;
+      piecesPanelDiv.innerHTML = '';
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      gtx.clearRect(0,0,guideCanvas.width,guideCanvas.height);
     }
-
+    function drawGuide(img) {
+      gtx.clearRect(0,0,guideCanvas.width,guideCanvas.height);
+      gtx.globalAlpha = 0.5;
+      gtx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+      gtx.globalAlpha = 1;
+      // Grid
+      gtx.strokeStyle = "#999";
+      for(let i=0; i<=ROWS; ++i)
+        gtx.strokeRect(0, i*PIECE_H, CANVAS_W, 0.5);
+      for(let j=0; j<=COLS; ++j)
+        gtx.strokeRect(j*PIECE_W, 0, 0.5, CANVAS_H);
+    }
+    function createPieces(img) {
+      // Buat potongan dan thumbnya
+      pieces = [];
+      thumbImgs = [];
+      for(let y=0; y<ROWS; ++y) {
+        for(let x=0; x<COLS; ++x) {
+          let idx = y*COLS + x;
+          let piece = {
+            gridX: x, gridY: y,
+            x: 0, y: 0, // posisi di canvas (jika sudah ditempatkan)
+            imgX: x*PIECE_W, imgY: y*PIECE_H,
+            placed: false, // sudah ditempatkan di grid?
+            idx: idx,
+          };
+          pieces.push(piece);
+          // buat thumbnail untuk panel bawah
+          let thumb = document.createElement('canvas');
+          thumb.width = PIECE_W; thumb.height = PIECE_H;
+          let tctx = thumb.getContext('2d');
+          tctx.drawImage(img, x*PIECE_W, y*PIECE_H, PIECE_W, PIECE_H, 0,0, PIECE_W, PIECE_H);
+          thumb.className = 'piece-thumb';
+          thumb.dataset.idx = idx;
+          thumb.addEventListener('mousedown', e => piecePanelMouseDown(e, idx));
+          thumbImgs.push(thumb);
+          piecesPanelDiv.appendChild(thumb);
+        }
+      }
+      // Acak urutan panel bawah
+      pieces = shuffle(pieces);
+      arrangePanel();
+    }
+    function arrangePanel() {
+      // Susun potongan di bawah papan puzzle
+      piecesPanelDiv.innerHTML = '';
+      let count = 0;
+      for(let piece of pieces) {
+        if (!piece.placed) {
+          thumbImgs[piece.idx].style.display = '';
+          piecesPanelDiv.appendChild(thumbImgs[piece.idx]);
+          count++;
+        } else {
+          thumbImgs[piece.idx].style.display = 'none';
+        }
+      }
+    }
     function shuffle(arr) {
       let a = arr.slice();
-      for (let i = a.length-1; i>0; i--) {
+      for(let i=a.length-1;i>0;i--){
         let j = Math.floor(Math.random()*(i+1));
-        [a[i], a[j]] = [a[j], a[i]];
+        [a[i],a[j]] = [a[j],a[i]];
       }
       return a;
     }
-
-    function renderPuzzle() {
-      let board = document.getElementById('puzzle-board');
-      board.innerHTML = '';
-      shuffled.forEach((num, idx) => {
-        let d = document.createElement('div');
-        d.className = 'piece';
-        d.draggable = playing;
-        d.textContent = num;
-        d.dataset.idx = idx;
-        d.addEventListener('dragstart', dragStart);
-        d.addEventListener('dragover', dragOver);
-        d.addEventListener('drop', drop);
-        board.appendChild(d);
-      });
+    function drawPuzzle() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // Gambar potongan yang sudah ditempatkan
+      for(let i=0;i<ROWS*COLS;++i){
+        let piece = placed[i];
+        if(piece){
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(piece.gridX*PIECE_W, piece.gridY*PIECE_H, PIECE_W, PIECE_H);
+          ctx.clip();
+          ctx.drawImage(puzzleImg, piece.imgX, piece.imgY, PIECE_W, PIECE_H, piece.gridX*PIECE_W, piece.gridY*PIECE_H, PIECE_W, PIECE_H);
+          ctx.restore();
+        }
+      }
+      // Gambar potongan yang sedang digeser
+      if (draggingPiece && !draggingPiece.placed) {
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.rect(draggingPiece.x, draggingPiece.y, PIECE_W, PIECE_H);
+        ctx.clip();
+        ctx.drawImage(puzzleImg, draggingPiece.imgX, draggingPiece.imgY, PIECE_W, PIECE_H, draggingPiece.x, draggingPiece.y, PIECE_W, PIECE_H);
+        ctx.restore();
+      }
+      // Gambar grid
+      ctx.strokeStyle = "#888";
+      for(let i=0; i<=ROWS; ++i)
+        ctx.strokeRect(0, i*PIECE_H, CANVAS_W, 0.5);
+      for(let j=0; j<=COLS; ++j)
+        ctx.strokeRect(j*PIECE_W, 0, 0.5, CANVAS_H);
     }
-
-    // Drag & drop logic
-    let dragSrc = null;
-    function dragStart(e) { dragSrc = +this.dataset.idx; }
-    function dragOver(e) { e.preventDefault(); }
-    function drop(e) {
-      let tgt = +this.dataset.idx;
-      if (dragSrc===null || dragSrc===tgt) return;
-      [shuffled[dragSrc], shuffled[tgt]] = [shuffled[tgt], shuffled[dragSrc]];
-      renderPuzzle();
-      checkWin();
-      dragSrc = null;
+    function getCursorPos(e) {
+      let rect = canvas.getBoundingClientRect();
+      let x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      let y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      return {x,y};
     }
-
-    // Timer
-    function startTimer() {
-      timer = 0;
-      document.getElementById('timer').textContent = timer;
-      clearInterval(interval);
-      interval = setInterval(() => {
-        timer++;
-        document.getElementById('timer').textContent = timer;
-      }, 1000);
+    function isInBoard(x, y) {
+      return (x >= 0 && x < CANVAS_W && y >= 0 && y < CANVAS_H);
     }
-    function stopTimer() { clearInterval(interval); }
-
-    // Mulai game
-    function startGame() {
-      if (energy<1) { showMsg('Energi habis!'); return; }
-      energy--;
-      updateEnergy();
-      createPuzzleArray();
-      shuffled = shuffle(puzzle);
-      renderPuzzle();
-      startTimer();
-      showMsg('');
-      playing = true;
-    }
-    function updateEnergy() {
-      document.getElementById('energy').textContent = energy;
-    }
-    function showMsg(msg) { document.getElementById('message').textContent = msg; }
-
-    // Cek selesai
-    function checkWin() {
-      let win = shuffled.every((num, i) => num === puzzle[i]);
-      if (win) {
-        playing = false;
-        stopTimer();
-        showMsg('🎉 Puzzle selesai! ('+timer+' detik)');
-        // Bonus energi jika menang
-        if (energy<5) energy++;
-        updateEnergy();
+    function canvasMouseDown(e) {
+      if (puzzleSolved) return;
+      let {x, y} = getCursorPos(e);
+      // Cek apakah mengklik potongan yang belum benar
+      for(let piece of pieces){
+        if(piece.placed) continue;
+        let px = piece.x, py = piece.y;
+        if (isInBoard(x, y) && Math.abs(x - px) < PIECE_W && Math.abs(y - py) < PIECE_H) {
+          draggingPiece = piece;
+          offsetX = x - px;
+          offsetY = y - py;
+          canvas.addEventListener('mousemove', canvasMouseMove);
+          canvas.addEventListener('mouseup', canvasMouseUp);
+          canvas.addEventListener('mouseleave', canvasMouseUp);
+          document.body.style.cursor = 'grabbing';
+          return;
+        }
       }
     }
-
-    // Auto start saat halaman dibuka
-    window.onload = startGame;
+    function piecePanelMouseDown(e, idx) {
+      if (puzzleSolved) return;
+      let piece = pieces.find(p => p.idx == idx && !p.placed);
+      if (!piece) return;
+      draggingPiece = piece;
+      offsetX = PIECE_W / 2;
+      offsetY = PIECE_H / 2;
+      // Mulai drag dari panel ke canvas
+      canvas.addEventListener('mousemove', canvasMouseMove);
+      canvas.addEventListener('mouseup', canvasMouseUp);
+      canvas.addEventListener('mouseleave', canvasMouseUp);
+      document.body.style.cursor = 'grabbing';
+      draggingPiece.x = CANVAS_W / 2 - PIECE_W / 2;
+      draggingPiece.y = CANVAS_H + 20;
+      drawPuzzle();
+    }
+    function canvasMouseMove(e) {
+      if (!draggingPiece) return;
+      let {x, y} = getCursorPos(e);
+      draggingPiece.x = x - offsetX;
+      draggingPiece.y = y - offsetY;
+      drawPuzzle();
+    }
+    function canvasMouseUp(e) {
+      if (!draggingPiece) return;
+      let {x, y} = getCursorPos(e);
+      // Cek apakah di grid dan dekat posisi benar
+      let gx = Math.round(draggingPiece.x/PIECE_W);
+      let gy = Math.round(draggingPiece.y/PIECE_H);
+      let slotIdx = gy * COLS + gx;
+      if (
+        gx === draggingPiece.gridX &&
+        gy === draggingPiece.gridY &&
+        isInBoard(gx*PIECE_W, gy*PIECE_H) &&
+        !placed[slotIdx]
+      ) {
+        // Snap dan lock di tempatnya
+        draggingPiece.x = gx * PIECE_W;
+        draggingPiece.y = gy * PIECE_H;
+        draggingPiece.placed = true;
+        placed[slotIdx] = draggingPiece;
+        // Remove dari panel
+        arrangePanel();
+        // Cek solved
+        puzzleSolved = placed.every((p, i) => p && p.idx === i);
+        if (puzzleSolved) alert('Puzzle selesai!');
+      } else {
+        // Kembali ke panel bawah
+        draggingPiece.x = 0;
+        draggingPiece.y = 0;
+      }
+      draggingPiece = null;
+      canvas.removeEventListener('mousemove', canvasMouseMove);
+      canvas.removeEventListener('mouseup', canvasMouseUp);
+      canvas.removeEventListener('mouseleave', canvasMouseUp);
+      document.body.style.cursor = 'default';
+      drawPuzzle();
+    }
+    // Hint: tempatkan satu potongan otomatis
+    hintBtn.onclick = function(){
+      if(puzzleSolved) return;
+      // Cari potongan yang belum benar
+      let piece = pieces.find(p => !p.placed);
+      if(!piece) return;
+      // Tempatkan di posisi sebenarnya
+      let idx = piece.gridY * COLS + piece.gridX;
+      if (!placed[idx]) {
+        piece.x = piece.gridX * PIECE_W;
+        piece.y = piece.gridY * PIECE_H;
+        piece.placed = true;
+        placed[idx] = piece;
+        arrangePanel();
+        drawPuzzle();
+      }
+      // Cek selesai
+      puzzleSolved = placed.every((p, i) => p && p.idx === i);
+      if (puzzleSolved) alert('Puzzle selesai!');
+    };
+    // Upload gambar dari file
+    document.getElementById('img-file').onchange = function(e){
+      let file = e.target.files[0];
+      if(!file) return;
+      let reader = new FileReader();
+      reader.onload = function(evt){
+        loadImage(evt.target.result);
+      };
+      reader.readAsDataURL(file);
+    };
+    // Upload gambar dari URL
+    document.getElementById('load-url-btn').onclick = function(){
+      let url = document.getElementById('url-input').value.trim();
+      if (!url) {
+        alert('Isi URL gambar');
+        return;
+      }
+      loadImage(url);
+    };
+    // Preview gambar asli
+    previewImg.onclick = function(){
+      if(!imgUrl) return;
+      previewOverlay.style.display = 'flex';
+      previewOverlay.querySelector('img').src = imgUrl;
+    }
+    previewOverlay.onclick = function(){
+      previewOverlay.style.display = 'none';
+    }
+    function loadImage(url) {
+      let img = new window.Image();
+      img.crossOrigin = "Anonymous";
+      img.onload = function() {
+        imgUrl = url;
+        previewImg.src = url;
+        previewOverlay.querySelector('img').src = url;
+        // Resize gambar ke grid
+        let canvasTmp = document.createElement('canvas');
+        canvasTmp.width = CANVAS_W; canvasTmp.height = CANVAS_H;
+        let tmpCtx = canvasTmp.getContext('2d');
+        tmpCtx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
+        puzzleImg = new window.Image();
+        puzzleImg.onload = () => {
+          resetPuzzle();
+          drawGuide(puzzleImg);
+          createPieces(puzzleImg);
+          drawPuzzle();
+        };
+        puzzleImg.src = canvasTmp.toDataURL();
+      }
+      img.onerror = function() {
+        alert('Gagal memuat gambar');
+      }
+      img.src = url;
+    }
+    // Load gambar default
+    window.onload = function(){
+      loadImage('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80');
+    }
+    // Drag dari panel ke canvas
+    canvas.addEventListener('mousedown', canvasMouseDown);
+    // Touch support (optional, basic)
+    canvas.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      canvasMouseDown(e);
+    });
+    canvas.addEventListener('touchmove', function(e) {
+      e.preventDefault();
+      canvasMouseMove(e);
+    });
+    canvas.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      canvasMouseUp(e);
+    });
   </script>
 </body>
 </html>
