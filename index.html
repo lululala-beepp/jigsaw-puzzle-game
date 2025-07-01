@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Jigsaw Puzzle Sederhana</title>
+  <style>
+    body { font-family: Arial,sans-serif; background:#f3f5fa; text-align:center; }
+    h1 { color: #4267b2; }
+    #game-ui { margin: 15px 0 18px 0; }
+    #puzzle-board { display: grid; grid-template-columns: repeat(3,70px); gap: 6px; margin:0 auto; width: 222px;}
+    .piece { background: #fff; border:2px solid #bbb; width:70px; height:70px; font-size:2em; display:flex; align-items:center; justify-content:center; cursor:grab; }
+    .piece.placed { background: #b2ffb2; cursor:default; }
+    #message { margin-top:20px; color:#2aaf2a; }
+    button { margin:3px; padding:7px 10px; border-radius:6px; border:none; background:#4267b2; color:#fff; font-size:1em; cursor:pointer;}
+    button:hover { background:#294179; }
+  </style>
+</head>
+<body>
+  <h1>🧩 Jigsaw Puzzle Sederhana</h1>
+  <div id="game-ui">
+    Waktu: <span id="timer">0</span> detik |
+    Energi: <span id="energy">5</span> ⚡
+    <br>
+    <button onclick="startGame()">Main Lagi</button>
+  </div>
+  <div id="puzzle-board"></div>
+  <div id="message"></div>
+  <script>
+    // --- Inisialisasi
+    const SIZE = 3; // 3x3
+    let puzzle = [], shuffled = [], timer = 0, interval, energy = 5, playing = false;
+
+    function createPuzzleArray() {
+      puzzle = [];
+      for (let i = 1; i <= SIZE*SIZE; i++) puzzle.push(i);
+    }
+
+    function shuffle(arr) {
+      let a = arr.slice();
+      for (let i = a.length-1; i>0; i--) {
+        let j = Math.floor(Math.random()*(i+1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function renderPuzzle() {
+      let board = document.getElementById('puzzle-board');
+      board.innerHTML = '';
+      shuffled.forEach((num, idx) => {
+        let d = document.createElement('div');
+        d.className = 'piece';
+        d.draggable = playing;
+        d.textContent = num;
+        d.dataset.idx = idx;
+        d.addEventListener('dragstart', dragStart);
+        d.addEventListener('dragover', dragOver);
+        d.addEventListener('drop', drop);
+        board.appendChild(d);
+      });
+    }
+
+    // Drag & drop logic
+    let dragSrc = null;
+    function dragStart(e) { dragSrc = +this.dataset.idx; }
+    function dragOver(e) { e.preventDefault(); }
+    function drop(e) {
+      let tgt = +this.dataset.idx;
+      if (dragSrc===null || dragSrc===tgt) return;
+      [shuffled[dragSrc], shuffled[tgt]] = [shuffled[tgt], shuffled[dragSrc]];
+      renderPuzzle();
+      checkWin();
+      dragSrc = null;
+    }
+
+    // Timer
+    function startTimer() {
+      timer = 0;
+      document.getElementById('timer').textContent = timer;
+      clearInterval(interval);
+      interval = setInterval(() => {
+        timer++;
+        document.getElementById('timer').textContent = timer;
+      }, 1000);
+    }
+    function stopTimer() { clearInterval(interval); }
+
+    // Mulai game
+    function startGame() {
+      if (energy<1) { showMsg('Energi habis!'); return; }
+      energy--;
+      updateEnergy();
+      createPuzzleArray();
+      shuffled = shuffle(puzzle);
+      renderPuzzle();
+      startTimer();
+      showMsg('');
+      playing = true;
+    }
+    function updateEnergy() {
+      document.getElementById('energy').textContent = energy;
+    }
+    function showMsg(msg) { document.getElementById('message').textContent = msg; }
+
+    // Cek selesai
+    function checkWin() {
+      let win = shuffled.every((num, i) => num === puzzle[i]);
+      if (win) {
+        playing = false;
+        stopTimer();
+        showMsg('🎉 Puzzle selesai! ('+timer+' detik)');
+        // Bonus energi jika menang
+        if (energy<5) energy++;
+        updateEnergy();
+      }
+    }
+
+    // Auto start saat halaman dibuka
+    window.onload = startGame;
+  </script>
+</body>
+</html>
