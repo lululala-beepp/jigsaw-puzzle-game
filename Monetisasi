@@ -1,0 +1,28 @@
+# Sistem Monetisasi Jigsaw Puzzle Game
+
+## Diamond Shop
+| Paket Diamond | Harga | Bonus |
+|---|---|---|
+| 20 Diamond | Rp10.000 | - |
+| 50 Diamond | Rp25.000 | 5 Bonus Diamond |
+| 120 Diamond | Rp60.000 | 15 Bonus Diamond |
+| 250 Diamond | Rp100.000 | 30 Bonus Diamond |
+| 500 Diamond | Rp180.000 | 80 Bonus Diamond |
+
+## Energi Pack
+| Paket Energi | Harga | Isi |
+|---|---|---|
+| 5 Energi (penuh) | Rp5.000 | Isi ulang energi ke 5 |
+| 30 Menit Energi Tak Terbatas | Rp10.000 | Main tanpa batas selama 30 menit |
+
+## Item Pendukung
+| Item | Harga | Fungsi |
+|---|---|---|
+| 2 Hint | 💎 5 atau Rp3.000 | Menunjukkan posisi 1 potongan puzzle |
+
+## Bundle Spesial
+| Nama Paket | Harga | Isi Paket |
+|---|---|---|
+| Starter Pack | Rp20.000 | 💎 30 Diamond + ⚡ 5 Energi + 💡 3 Hint |
+| Pro Puzzle Pack | Rp50.000 | 💎 100 Diamond + ⏳ 60 menit energi + 💡 5 Hint |
+| Ultimate Pack | Rp100.000 | 💎 300 Diamond + ⚡ Full Energi + 💡 10 Hint |
