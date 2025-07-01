@@ -1,0 +1,20 @@
+# Konsep Utama Game: Jigsaw Puzzle
+
+Game menyusun potongan puzzle hingga membentuk gambar utuh.
+
+## Fitur Utama
+- Level puzzle bertingkat
+- Mode harian, musiman
+- Lomba global & leaderboard
+- Sistem energi & reward
+- Shop item, diamond, bundle, monetisasi
+
+## Mekanisme
+- Energi diperlukan untuk main, regenerasi tiap 30 menit
+- Timer per level & hadiah jika berhasil
+- Hadiah harian dan seasonal event
+- Pembelian diamond, energi, hint, bundle di toko
+
+## Monetisasi
+- Pembelian diamond & energi
+- Bundle hemat dan item pendukung
